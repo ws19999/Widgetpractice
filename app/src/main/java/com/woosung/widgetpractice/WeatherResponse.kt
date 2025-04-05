@@ -32,7 +32,9 @@ data class ApiItem(
     val baseDate: String,
     val baseTime: String,
     val category: String,
+    val fcstValue: String,
     val nx: Int,
     val ny: Int,
-    val obsrValue: String // **주의** 실황 데이터는 fcstValue가 아닌 obsrValue를 사용합니다!
+    val fcstDate: String,
+    val fcstTime: String
 )

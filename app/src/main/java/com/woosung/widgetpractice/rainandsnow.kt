@@ -18,13 +18,14 @@ import java.util.Locale
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.util.Date
 
 
 /**
  * Implementation of App Widget functionality.
  */
 class rainandsnow : AppWidgetProvider() {
-    val apiKey = "CGYBlJQVqP6w3Ab+6xNR7mIFEnyd5LepVXiO+UtXWO/LZ1ijGxtPEfzn08cObtTMKC1bwkQYwIpLLNO3xdMA8w=="
+    val apiKey = "CGYBlJQVqP6w3Ab%2B6xNR7mIFEnyd5LepVXiO%2BUtXWO%2FLZ1ijGxtPEfzn08cObtTMKC1bwkQYwIpLLNO3xdMA8w%3D%3D"
 
     @SuppressLint("MissingPermission")
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -41,27 +42,40 @@ class rainandsnow : AppWidgetProvider() {
                 val (nx, ny) = GridConverter.convertGRID_GPS(lat, lon)
 
                 val calendar = Calendar.getInstance()
-                calendar.add(Calendar.MINUTE, -30)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                calendar.add(Calendar.HOUR_OF_DAY, -1)
                 val baseDate = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(calendar.time)
                 val baseTime = SimpleDateFormat("HH00", Locale.KOREA).format(calendar.time)
 
-                RetrofitClient.api.getRealtimeWeather(apiKey, baseDate = baseDate, baseTime = baseTime, nx = nx, ny = ny)
+
+                RetrofitClient.api.getForecastWeather(apiKey, baseDate = baseDate, baseTime = baseTime, nx = nx, ny = ny)
                     .enqueue(object : Callback<WeatherResponse> {
                         override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
-                            val items = response.body()?.response?.body?.items?.item ?: return
-                            Log.d("API_RESPONSE", "items = $items")  // 추가
-                            val temp = items.find { it.category == "T1H" }?.obsrValue ?: "N/A"
-                            val weatherStatus = getWeatherStatus(items)
+                            val items = response.body()?.response?.body?.items?.item ?: run {
+                                Log.e("WIDGET", "API 응답 없음 또는 item 리스트 null")
+                                return
+                            }
+
+                            // 🔍 로그 찍기
+                            for (item in items) {
+                                Log.d("WIDGET_ITEM", "category=${item.category}, value=${item.fcstValue}")
+                            }
+
+                            val temp = items.filter { it.category == "T1H" }
+                                .maxByOrNull { it.fcstTime }?.fcstValue ?: "N/A"
+                            val weatherStatus = getWeatherStatusFromForecast(items)
                             val cityName = getCityName(context, lat, lon)
 
                             updateWidget(context, appWidgetManager, appWidgetIds, cityName, temp, weatherStatus)
                         }
 
                         override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                            Log.e("API_ERROR", "API 호출 실패: ${t.message}")
+                            Log.e("API_FAIL", "날씨 예보 API 실패: ${t.message}")
                         }
-
                     })
+
             }
         }
     }
@@ -76,11 +90,16 @@ class rainandsnow : AppWidgetProvider() {
         }
     }
 
-    private fun getWeatherStatus(items: List<ApiItem>): String {
-        val sky = items.find { it.category == "SKY" }?.obsrValue ?: "0"
-        val pty = items.find { it.category == "PTY" }?.obsrValue ?: "0"
+    fun getWeatherStatusFromForecast(items: List<ApiItem>): String {
+        // SKY와 PTY 중 가장 최신 시간의 데이터를 선택
+        val skyItems = items.filter { it.category == "SKY" }
+        val ptyItems = items.filter { it.category == "PTY" }
 
-        return when (pty) {
+        // 최신 fcstTime 기준으로 정렬
+        val latestSky = skyItems.maxByOrNull { it.fcstTime }?.fcstValue ?: "0"
+        val latestPty = ptyItems.maxByOrNull { it.fcstTime }?.fcstValue ?: "0"
+
+        return when (latestPty) {
             "1" -> "비"
             "2" -> "비/눈"
             "3" -> "눈"
@@ -88,7 +107,7 @@ class rainandsnow : AppWidgetProvider() {
             "6" -> "진눈깨비"
             "7" -> "눈날림"
             else -> {
-                when (sky) {
+                when (latestSky) {
                     "1" -> "맑음"
                     "3" -> "구름많음"
                     "4" -> "흐림"
@@ -97,6 +116,9 @@ class rainandsnow : AppWidgetProvider() {
             }
         }
     }
+
+
+
 
     private fun getCityName(context: Context, lat: Double, lon: Double): String {
         val geocoder = Geocoder(context, Locale.KOREA)
