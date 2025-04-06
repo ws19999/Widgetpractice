@@ -62,9 +62,13 @@ class rainandsnow : AppWidgetProvider() {
                             for (item in items) {
                                 Log.d("WIDGET_ITEM", "category=${item.category}, value=${item.fcstValue}")
                             }
+                            val now = Calendar.getInstance()
+                            now.add(Calendar.HOUR_OF_DAY, 1)
+                            now.set(Calendar.MINUTE, 0)
+                            val targetTime = SimpleDateFormat("HHmm", Locale.KOREA).format(now.time)
 
-                            val temp = items.filter { it.category == "T1H" }
-                                .maxByOrNull { it.fcstTime }?.fcstValue ?: "N/A"
+
+                            val temp = items.find { it.category == "T1H" && it.fcstTime == targetTime }?.fcstValue ?: "N/A"
                             val weatherStatus = getWeatherStatusFromForecast(items)
                             val cityName = getCityName(context, lat, lon)
 
